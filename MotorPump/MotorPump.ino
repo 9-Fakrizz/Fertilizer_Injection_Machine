@@ -12,6 +12,7 @@ const int enablePin2 = 13;
 // Limit switch pins
 const int limitSwitchPin1 = 2; // Limit switch for stepper 1
 const int limitSwitchPin2 = 3; // Limit switch for stepper 2
+
 // Create AccelStepper objects
 AccelStepper stepper1(1, stepPin1, dirPin1);
 AccelStepper stepper2(1, stepPin2, dirPin2);
@@ -45,8 +46,9 @@ void setup() {
   stepper2.setAcceleration(1000);
   // Move motors to find zero position
   findZeroPosition(stepper1, limitSwitchPin1);
+  Log.notice("Set Zero Stepper1 Complete!\n");
   findZeroPosition(stepper2, limitSwitchPin2);
-  Log.notice("Set Zero Complete!\n");
+  Log.notice("Set Zero Stepper2 Complete!\n");
 }
 
 void loop() {
@@ -54,21 +56,48 @@ void loop() {
   // while (stepper.distanceToGo() != 0) {
   //   stepper1.run();
   // }
+  if(Serial.available()>0){
+    String receivedData = Serial.readStringUntil('\n');
+    int commaIndex = receivedData.indexOf(',');  // Find the position of the comma
+    if (commaIndex != -1) {  // Ensure the comma exists
+        float x = receivedData.substring(0, commaIndex).toFloat();  // Extract and convert x
+        float y = receivedData.substring(commaIndex + 1).toFloat();  // Extract and convert y
+        Serial.print("Received x: ");
+        Serial.println(x);
+        Serial.print("Received y: ");
+        Serial.println(y);
+        stepper1.setSpeed(200);
+        stepper1.moveTo(cmtostep(y,stepper1));
+        stepper2.setSpeed(200);
+        stepper2.moveTo(cmtostep(x,stepper2));
+        while (stepper1.distanceToGo() != 0) {
+          stepper1.run();
+        }
+        while (stepper2.distanceToGo() != 0) {
+          stepper2.run();
+        }  
+    } 
+  }
+  
+  
+  
+  
 }
 
 void findZeroPosition(AccelStepper& stepper, int limitSwitchPin) {
   // Move the motor backward to find the limit switch
-  stepper.setSpeed(-100); // Set a slow speed for homing
+  stepper.setSpeed(100); // Set a slow speed for homing
   while (digitalRead(limitSwitchPin) == HIGH) { // Wait until the switch is pressed
     stepper.runSpeed();
+    //Serial.println(digitalRead(limitSwitchPin));
   }
   // Stop the motor and set the current position as zero
   stepper.stop();
   stepper.setCurrentPosition(0);
-  Log.notice("Homing complete for stepper motor.");
+  Log.notice("Homing complete for stepper motor.\n");
 }
 
-int cmtostep(float cm, int speed, int acceleration, AccelStepper& stepper){
+int cmtostep(float cm, AccelStepper& stepper){
  // Configuration for stepper1
   const float stepsPerRevolution1 = 205.0;
   const float distancePerRevolution1 = 1.0;
@@ -79,13 +108,10 @@ int cmtostep(float cm, int speed, int acceleration, AccelStepper& stepper){
   
   // Check which stepper is being used
   if (&stepper == &stepper1) { // Compare addresses
-    stepsToMove = cm * (stepsPerRevolution1 / distancePerRevolution1);
+    stepsToMove = -cm * (stepsPerRevolution1 / distancePerRevolution1);
   } else if (&stepper == &stepper2) {
-    stepsToMove = cm * (stepsPerRevolution2 / distancePerRevolution2);
+    stepsToMove = -cm * (stepsPerRevolution2 / distancePerRevolution2);
   }
-  // Set speed and acceleration for the stepper
-  stepper.setMaxSpeed(speed);
-  stepper.setAcceleration(acceleration);
   Log.notice("Step to Move: %d\n", stepsToMove);
   return stepsToMove;
 }
